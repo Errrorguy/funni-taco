@@ -1,0 +1,155 @@
+-- LOCAL SCRIPT (StarterGui → ScreenGui)
+
+-- 1) Create UI
+local player = game.Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local screenGui  = Instance.new("ScreenGui", playerGui)
+screenGui.Name    = "TacoGui"
+
+local frame = Instance.new("Frame", screenGui)
+frame.Size             = UDim2.new(0, 220, 0, 70)
+frame.Position         = UDim2.new(0.5, -110, 0.5, -35)
+frame.BackgroundColor3 = Color3.fromRGB(255, 223, 127)
+frame.BorderSizePixel  = 4
+
+local button = Instance.new("TextButton", frame)
+button.Size             = UDim2.new(0, 200, 0, 50)
+button.Position         = UDim2.new(0, 10, 0, 10)
+button.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
+button.Font             = Enum.Font.Cartoon
+button.TextSize         = 28
+button.Text             = "Taco 🌮"
+
+-- 2) Load and configure taco-rain sound
+local sound = Instance.new("Sound", frame)
+sound.SoundId   = "rbxassetid://142376088"   -- Taco-rain sound ID
+sound.Volume    = 1
+sound.Looped    = false
+
+-- 3) Draggable frame
+do
+    local UserInput = game:GetService("UserInputService")
+    local dragging, dragInput, dragStart, startPos
+
+    local function update(input)
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y
+        )
+    end
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging  = true
+            dragStart = input.Position
+            startPos  = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+
+    UserInput.InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
+            update(input)
+        end
+    end)
+end
+
+-- 4) Taco-spawn function (two-wedge shell + fillings)
+local function spawnTaco(playerPosition)
+    local tacoModel = Instance.new("Model", workspace)
+    tacoModel.Name = "Taco"
+
+    -- Shell halves
+    local shellColor = BrickColor.new("Bright yellow")
+    local halfSize   = Vector3.new(2, 0.5, 4)
+    local left = Instance.new("WedgePart")
+    local right = Instance.new("WedgePart")
+
+    for _, part in ipairs({left,right}) do
+        part.Size       = halfSize
+        part.Anchored   = false
+        part.CanCollide = true
+        part.BrickColor = shellColor
+        part.Material   = Enum.Material.SmoothPlastic
+        part.Parent     = tacoModel
+    end
+
+    -- Position tacos above the player
+    local spawnPosition = playerPosition + Vector3.new(math.random(-10, 10), 50, math.random(-10, 10))  -- Randomized above player
+
+    left.    CFrame = CFrame.new(spawnPosition) * CFrame.Angles(0, 0, 0)
+    right.CFrame    = CFrame.new(spawnPosition) * CFrame.Angles(0, math.rad(180), 0)
+
+    -- Weld helper
+    local function weld(a,b)
+        local w = Instance.new("WeldConstraint")
+        w.Part0  = a
+        w.Part1  = b
+        w.Parent = a
+    end
+    weld(left,right)
+
+    -- Fillings
+    local fillColors = {
+        BrickColor.new("Reddish brown"),
+        BrickColor.new("Lime green"),
+        BrickColor.new("Bright orange"),
+        BrickColor.new("Bright red"),
+    }
+    for i = 1, math.random(3,6) do
+        local f = Instance.new("Part")
+        f.Size       = Vector3.new(0.5,0.5,0.5)
+        f.Anchored   = false
+        f.CanCollide = true
+        f.BrickColor = fillColors[math.random(1,#fillColors)]
+        f.Material   = Enum.Material.SmoothPlastic
+        f.CFrame     = CFrame.new(
+            spawnPosition + Vector3.new(
+                math.random(-1,1),
+                math.random(-0.2,0.2),
+                math.random(-1,1)
+            )
+        )
+        f.Parent     = tacoModel
+        weld(left, f)
+    end
+
+    -- Spin
+    local spin = Instance.new("BodyAngularVelocity", left)
+    spin.AngularVelocity = Vector3.new(math.random(),math.random(),math.random()) * math.pi
+    spin.MaxTorque       = Vector3.new(4000,4000,4000)
+
+    -- Auto-cleanup after 3 seconds
+    game:GetService("Debris"):AddItem(tacoModel, 3)
+end
+
+-- 5) Rain tacos while sound is playing
+button.MouseButton1Click:Connect(function()
+    if not sound.IsPlaying then
+        sound:Play()
+        
+        -- Continuously spawn tacos above the player and around them while sound is playing
+        spawn(function()
+            while sound.IsPlaying do
+                -- Check if player is alive and move tacos around them
+                local character = player.Character
+                if character and character:FindFirstChild("HumanoidRootPart") then
+                    local playerPosition = character.HumanoidRootPart.Position
+                    spawnTaco(playerPosition)
+                end
+                task.wait(0.2)  -- Spawn tacos every 0.2 seconds
+            end
+        end)
+    end
+end)
